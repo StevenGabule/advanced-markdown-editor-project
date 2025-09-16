@@ -1,0 +1,25 @@
+.App {
+  text-align: center;
+  padding: 2rem;
+}
+
+.App-header {
+  background-color: #282c34;
+  padding: 1rem;
+  color: white;
+  border-radius: 8px;
+}
+
+.mode-toggle {
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  background: #6c757d;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.mode-toggle:hover {
+  background: #5a6268;
+}

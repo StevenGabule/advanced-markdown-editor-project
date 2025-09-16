@@ -1,0 +1,50 @@
+.markdown-preview h1 {
+  font-size: 2em;
+  margin: 0.67em 0;
+}
+.markdown-preview h2 {
+  font-size: 1.5em;
+  margin: 0.83em 0;
+}
+.markdown-preview h3 {
+  font-size: 1.17em;
+  margin: 1em 0;
+}
+.markdown-preview p {
+  margin: 1em 0;
+}
+.markdown-preview ul,
+.markdown-preview ol {
+  padding-left: 2em;
+  margin: 1em 0;
+}
+.markdown-preview code {
+  background-color: #f0f0f0;
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+  font-family: monospace;
+}
+
+.markdown-preview pre {
+  background-color: #2d2d2d;
+  color: #f8f8f2;
+  padding: 1em;
+  border-radius: 6px;
+  overflow-x: auto;
+}
+
+.markdown-preview blockquote {
+  border-left: 4px solid #ccc;
+  padding-left: 1em;
+  margin: 1em 0;
+  color: #555;
+}
+
+.markdown-preview a {
+  color: #007bff;
+  text-decoration: none;
+}
+
+.markdown-preview a:hover {
+  text-decoration: underline;
+}

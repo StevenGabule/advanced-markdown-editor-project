@@ -1,0 +1,20 @@
+.dark {
+  background-color: #121212;
+  color: #e0e0e0;
+}
+
+.dark .App-header {
+  background-color: #1e1e1e;
+}
+
+.dark .markdown-input {
+  background-color: #1e1e1e;
+  color: #e0e0e0;
+  border-color: #444;
+}
+
+.dark .markdown-preview {
+  background-color: #1e1e1e;
+  color: #e0e0e0;
+  border-color: #444;
+}
