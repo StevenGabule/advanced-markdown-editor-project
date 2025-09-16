@@ -58,6 +58,37 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent = '' }) 
 		}, 0)
 	}
 
+	const handleExport = () => {
+		const blob = new Blob([debouncedMarkdown], { type: 'text/markdown;charset=utf-8' })
+		const url = URL.createObjectURL(blob);
+		const link = document.createElement('a');
+		link.href = url;
+		link.download = 'document.md';
+		document.body.appendChild(link);
+		link.click();
+		document.body.removeChild(link);
+		URL.revokeObjectURL(url)
+	}
+
+	const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const file = e.target.files?.[0];
+		if (!file) return;
+
+		const reader = new FileReader();
+
+		reader.onload = (event) => {
+			const content = event.target?.result as string;
+			setMarkdown(content);
+		}
+
+		reader.onerror = () => {
+			alert('Failed to read file.')
+		}
+
+		reader.readAsText(file)
+	}
+
+
 	React.useEffect(() => {
 		const parse = async () => {
 			const html = await parseMarkdown(debouncedMarkdown);
@@ -70,7 +101,25 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent = '' }) 
 		<div className="markdown-editor">
 			<div className="editor-pane">
 				<h3>Write</h3>
+
+				{/* File import/export buttons */}
+				<div className="file-actions">
+					<button className='btn' onClick={handleExport}>
+						📥 Export .md
+					</button>
+					<label className="btn">
+						📂 Import .md
+						<input
+							type="file"
+							accept=".md, text/markdown"
+							onChange={handleImport}
+							className="file-input"
+						/>
+					</label>
+				</div>
+
 				<Toolbar onInsert={insertText} />
+
 				<textarea
 					ref={textareaRef}
 					value={markdown}
