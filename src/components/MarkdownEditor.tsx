@@ -11,10 +11,39 @@ interface MarkdownEditorProps {
 }
 
 const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent = '' }) => {
-	const [markdown, setMarkdown] = React.useState(initialContent);
+	const [markdown, setMarkdown] = React.useState(() => {
+		console.log({ initialContent })
+		// if initial content is provided, use it
+		if (initialContent !== '') {
+			return initialContent;
+		}
+
+		const saved = localStorage.getItem('markdown-editor-content');
+		console.log({ saved })
+		return saved || '# Welcome to Markdown Editor \nStart typing...'
+	});
 	const [renderedHTML, setRenderedHTML] = React.useState('');
-	const textareaRef = React.useRef<HTMLTextAreaElement>(null)
+	const [isSaved, setIsSaved] = React.useState(true)
+	const [lastSaved, setLastSaved] = React.useState<Date | null>(null);
+	const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 	const debouncedMarkdown = useDebounce(markdown, 300)
+
+	// ✅ Auto-save to localStorage
+	React.useEffect(() => {
+		if (debouncedMarkdown !== initialContent) {
+			localStorage.setItem('markdown-editor-content', debouncedMarkdown);
+			setIsSaved(true)
+			setLastSaved(new Date());
+		}
+	}, [debouncedMarkdown, initialContent])
+
+
+	// ✅ Mark as unsaved while typing
+	React.useEffect(() => {
+		if (debouncedMarkdown !== initialContent) {
+			setIsSaved(false);
+		}
+	}, [debouncedMarkdown, initialContent]);
 
 	const insertText = (text: string) => {
 		const textarea = textareaRef.current;
@@ -88,6 +117,13 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent = '' }) 
 		reader.readAsText(file)
 	}
 
+	const handleClearSaved = () => {
+		if (window.confirm('Are you sure you want to clear saved content?')) {
+			localStorage.removeItem('markdown-editor-content');
+			setMarkdown('# Welcome to Markdown Editor\nStart typing...');
+			setIsSaved(true);
+		}
+	};
 
 	React.useEffect(() => {
 		const parse = async () => {
@@ -116,6 +152,16 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent = '' }) 
 							className="file-input"
 						/>
 					</label>
+					<button onClick={handleClearSaved} className="btn" style={{ background: '#dc3545' }}>
+						🗑️ Clear Saved
+					</button>
+					{!isSaved && <span className="status-indicator">💾 Saving...</span>}
+					{isSaved && <span className="status-indicator saved">✅ Saved</span>}
+					{lastSaved && (
+						<span className="status-indicator saved">
+							✅ Saved {lastSaved.toLocaleTimeString()}
+						</span>
+					)}
 				</div>
 
 				<Toolbar onInsert={insertText} />

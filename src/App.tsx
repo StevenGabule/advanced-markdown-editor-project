@@ -13,7 +13,7 @@ const App: React.FC = () => {
           {isDark ? '☀️ Light Mode' : '🌙 Dark Mode'}
         </button>
       </header>
-      <MarkdownEditor initialContent='# Hello, Markdown!' />
+      <MarkdownEditor />
     </div>
   )
 }

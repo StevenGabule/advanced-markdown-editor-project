@@ -66,3 +66,20 @@
 .file-input {
   display: none;
 }
+
+.status-indicator {
+  font-size: 0.85rem;
+  margin-left: 1rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+}
+
+.status-indicator.saved {
+  background: #d4edda;
+  color: #155724;
+}
+
+.status-indicator {
+  background: #fff3cd;
+  color: #856404;
+}

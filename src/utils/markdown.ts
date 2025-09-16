@@ -10,7 +10,7 @@ const renderer = new marked.Renderer();
 renderer.code = ({
   text,
   lang,
-  escaped,
+  escaped: _,
 }: {
   text: string;
   lang?: string;
