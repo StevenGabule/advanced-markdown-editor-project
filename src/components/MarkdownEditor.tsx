@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React from 'react';
 import Toolbar from './Toolbar';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -5,6 +6,19 @@ import { parseMarkdown } from '@/utils/markdown';
 import '@/styles/markdown-styles.css';
 import './MarkdownEditor.css';
 import './Toolbar.css'
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+
+type Html2CanvasOptions = Parameters<typeof html2canvas>[1];
+
+type Html2CanvasOptionsExtended = Html2CanvasOptions & {
+	scale?: number;
+	scrollX?: number;
+	scrollY?: number;
+	windowWidth?: number;
+	windowHeight?: number;
+	backgroundColor?: string | null;
+};
 
 interface MarkdownEditorProps {
 	initialContent?: string;
@@ -25,6 +39,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent = '' }) 
 	const [renderedHTML, setRenderedHTML] = React.useState('');
 	const [isSaved, setIsSaved] = React.useState(true)
 	const [lastSaved, setLastSaved] = React.useState<Date | null>(null);
+	const [isExportingPDF, setIsExportingPDF] = React.useState(false);
 	const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 	const debouncedMarkdown = useDebounce(markdown, 300)
 
@@ -125,6 +140,176 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent = '' }) 
 		}
 	};
 
+	const getMarkdownStyles = (): string => {
+		// These are the basic styles from your markdown-styles.css
+		return `
+    h1 { font-size: 2em; margin: 0.67em 0; }
+    h2 { font-size: 1.5em; margin: 0.83em 0; }
+    h3 { font-size: 1.17em; margin: 1em 0; }
+    p { margin: 1em 0; }
+    ul, ol { padding-left: 2em; margin: 1em 0; }
+    blockquote {
+      border-left: 4px solid #ccc;
+      padding-left: 1em;
+      margin: 1em 0;
+      color: #555;
+    }
+    a { color: #007bff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .code-block-wrapper { position: relative; margin: 1em 0; }
+    .code-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #2d2d2d;
+      padding: 0.5em 1em;
+      border-top-left-radius: 6px;
+      border-top-right-radius: 6px;
+      font-size: 0.85em;
+      color: #ccc;
+    }
+    .code-header .lang { font-weight: bold; text-transform: uppercase; }
+    .copy-btn {
+      background: #444;
+      color: white;
+      border: none;
+      padding: 0.25em 0.5em;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 0.85em;
+    }
+    .copy-btn:hover { background: #555; }
+  `;
+	};
+
+	const exportAsHTML = () => {
+		const htmlContent = parseMarkdown(debouncedMarkdown);
+
+		const fullHTML = `
+			<!DOCTYPE html>
+			<html lang="en">
+			<head>
+				<meta charset="UTF-8">
+				<meta name="viewport" content="width=device-width, initial-scale=1.0">
+				<title>Exported Markdown Document</title>
+				<style>
+					body {
+						font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+						line-height: 1.6;
+						max-width: 800px;
+						margin: 40px auto;
+						padding: 0 20px;
+					}
+					/* Light mode (default) */
+					body {
+						color: #333;
+						background: #fff;
+					}
+					pre {
+						background: #f5f5f5;
+						color: #333;
+					}
+					/* Dark mode */
+					@media (prefers-color-scheme: dark) {
+						body {
+							color: #e0e0e0;
+							background: #121212;
+						}
+						pre {
+							background: #1e1e1e;
+							color: #e0e0e0;
+						}
+					}
+					${getMarkdownStyles()}
+					pre { padding: 16px; border-radius: 6px; overflow-x: auto; }
+					code { background: #f0f0f0; padding: 0.2em 0.4em; border-radius: 3px; font-family: monospace; }
+					pre code { background: transparent; padding: 0; }
+				</style>
+			</head>
+			<body>
+				${htmlContent}
+			</body>
+			</html>
+			`;
+		const blob = new Blob([fullHTML], { type: 'text/html;charset=utf-8' });
+		const url = URL.createObjectURL(blob)
+		const link = document.createElement('a');
+		link.href = url;
+		link.download = 'document.html'
+		document.body.appendChild(link);
+		link.click();
+		document.body.removeChild(link);
+		URL.revokeObjectURL(url)
+	}
+
+	const exportAsPDF = () => {
+		setIsExportingPDF(true);
+		const previewElement: any = document.querySelector('.markdown-preview');
+		if (!previewElement) {
+			setIsExportingPDF(false);
+			return;
+		}
+
+		// Temporarily force light mode for PDF
+		const originalBg = previewElement.style.backgroundColor;
+		const originalColor = previewElement.style.color;
+		previewElement.style.backgroundColor = '#ffffff';
+		previewElement.style.color = '#000000';
+
+		// Also force light mode for code blocks
+		const codeBlocks = previewElement.querySelectorAll('pre');
+		const originalCodeBg: any[] = [];
+		codeBlocks.forEach((block: any, index: number) => {
+			originalCodeBg[index] = block.getAttribute('data-original-bg') || block.style.backgroundColor;
+			block.style.backgroundColor = '#f5f5f5';
+			block.style.color = '#000000';
+		});
+
+		html2canvas(previewElement, {
+			scale: 2,
+			useCORS: true,
+			backgroundColor: '#ffffff',
+		} as Html2CanvasOptionsExtended).then((canvas) => {
+			// Restore original styles
+			previewElement.style.backgroundColor = originalBg;
+			previewElement.style.color = originalColor;
+			codeBlocks.forEach((block: any, index: number) => {
+				block.style.backgroundColor = originalCodeBg[index];
+			});
+
+			const imgData = canvas.toDataURL('image/png');
+			const pdf = new jsPDF('p', 'mm', 'a4');
+			const pdfWidth = pdf.internal.pageSize.getWidth();
+			const pdfHeight = pdf.internal.pageSize.getHeight();
+			const imgWidth = canvas.width;
+			const imgHeight = canvas.height;
+			const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+			const imgX = (pdfWidth - imgWidth * ratio) / 2;
+			const imgY = 10;
+
+			pdf.addImage(
+				imgData,
+				'PNG',
+				imgX,
+				imgY,
+				imgWidth * ratio,
+				imgHeight * ratio
+			);
+
+			pdf.save('document.pdf');
+			setIsExportingPDF(false);
+		}).catch((error) => {
+			// Restore styles even if error occurs
+			previewElement.style.backgroundColor = originalBg;
+			previewElement.style.color = originalColor;
+			codeBlocks.forEach((block: any, index: number) => {
+				block.style.backgroundColor = originalCodeBg[index];
+			});
+			console.error('PDF export failed:', error);
+			setIsExportingPDF(false);
+		});
+	};
+
 	React.useEffect(() => {
 		const parse = async () => {
 			const html = await parseMarkdown(debouncedMarkdown);
@@ -142,6 +327,17 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent = '' }) 
 				<div className="file-actions">
 					<button className='btn' onClick={handleExport}>
 						📥 Export .md
+					</button>
+					<button onClick={exportAsHTML} className="btn" style={{ background: '#6f42c1' }}>
+						🖥️ Export HTML
+					</button>
+					<button
+						onClick={exportAsPDF}
+						className="btn"
+						style={{ background: '#e83e8c' }}
+						disabled={isExportingPDF}
+					>
+						{isExportingPDF ? '📄 Exporting...' : '📄 Export PDF'}
 					</button>
 					<label className="btn">
 						📂 Import .md
