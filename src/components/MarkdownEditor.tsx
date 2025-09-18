@@ -8,6 +8,7 @@ import './MarkdownEditor.css';
 import './Toolbar.css'
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { useEditorHistory } from '@/hooks/useEditorHistory';
 
 type Html2CanvasOptions = Parameters<typeof html2canvas>[1];
 
@@ -25,23 +26,37 @@ interface MarkdownEditorProps {
 }
 
 const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent = '' }) => {
-	const [markdown, setMarkdown] = React.useState(() => {
-		console.log({ initialContent })
-		// if initial content is provided, use it
-		if (initialContent !== '') {
-			return initialContent;
-		}
-
-		const saved = localStorage.getItem('markdown-editor-content');
-		console.log({ saved })
-		return saved || '# Welcome to Markdown Editor \nStart typing...'
-	});
+	const { currentState, saveState, undo, redo, canRedo, canUndo } = useEditorHistory()
+	const [markdown, setMarkdown] = React.useState(currentState.content);
 	const [renderedHTML, setRenderedHTML] = React.useState('');
 	const [isSaved, setIsSaved] = React.useState(true)
 	const [lastSaved, setLastSaved] = React.useState<Date | null>(null);
 	const [isExportingPDF, setIsExportingPDF] = React.useState(false);
+	const [cursorPosition, setCursorPosition] = React.useState<{ start: number; end: number } | null>(null)
 	const textareaRef = React.useRef<HTMLTextAreaElement>(null);
-	const debouncedMarkdown = useDebounce(markdown, 300)
+	const debouncedMarkdown = useDebounce(markdown, 500)
+
+	React.useEffect(() => {
+		if (markdown !== currentState.content) {
+			setMarkdown(currentState.content)
+
+			// Restore cursor position if available
+			if (currentState.cursorPosition) {
+				setCursorPosition(currentState.cursorPosition)
+			}
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [currentState])
+
+	React.useEffect(() => {
+		if (cursorPosition && textareaRef.current) {
+			const textarea = textareaRef.current;
+			setTimeout(() => {
+				textarea.focus();
+				textarea.setSelectionRange(cursorPosition.start, cursorPosition.end)
+			}, 0)
+		}
+	}, [cursorPosition])
 
 	// ✅ Auto-save to localStorage
 	React.useEffect(() => {
@@ -60,9 +75,38 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent = '' }) 
 		}
 	}, [debouncedMarkdown, initialContent]);
 
+	React.useEffect(() => {
+		const parse = async () => {
+			const html = await parseMarkdown(debouncedMarkdown);
+			setRenderedHTML(html);
+		};
+		parse();
+	}, [debouncedMarkdown]);
+
+	React.useEffect(() => {
+		const handleKeyDown = (e: React.KeyboardEvent) => {
+			if (e.ctrlKey || e.metaKey) {
+				if (e.key === 'z' && !e.shiftKey) {
+					e.preventDefault();
+					undo();
+				} else if ((e.key === 'y') || (e.key === 'z' && e.shiftKey)) {
+					e.preventDefault();
+					redo();
+				}
+			}
+		};
+
+		// @ts-expect-error ignore type checking
+		window.addEventListener('keydown', handleKeyDown);
+
+		return () => {
+			// @ts-expect-error ignore type checking
+			window.removeEventListener('keydown', handleKeyDown)
+		}
+	}, [undo, redo])
+
 	const insertText = (text: string) => {
 		const textarea = textareaRef.current;
-		console.log({ textarea })
 		if (!textarea) return;
 
 		const start = textarea.selectionStart;
@@ -86,19 +130,22 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent = '' }) 
 				newText = `- ${selectedText}`;
 			}
 		}
-
+		let before = '';
+		let after = '';
 		setMarkdown(prev => {
-			const before = prev.substring(0, start);
-			const after = prev.substring(end);
+			before = prev.substring(0, start);
+			after = prev.substring(end);
 			return before + newText + after;
 		});
-		// Adjust cursor position
-		// const newStart = start + (selectedText ? 0 : text.indexOf(selectedText || 'text'));
-		const newEnd = start + newText.length - (selectedText ? 0 : text.indexOf(selectedText || 'text'));
+
+		const newEnd = start + newText.length;
 
 		setTimeout(() => {
 			textarea.focus();
 			textarea.setSelectionRange(newEnd, newEnd);
+
+			// save to history with new cursor position
+			saveState(before + newText + after, { start: newEnd, end: newEnd })
 		}, 0)
 	}
 
@@ -123,6 +170,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent = '' }) 
 		reader.onload = (event) => {
 			const content = event.target?.result as string;
 			setMarkdown(content);
+			saveState(content);
 		}
 
 		reader.onerror = () => {
@@ -135,8 +183,11 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent = '' }) 
 	const handleClearSaved = () => {
 		if (window.confirm('Are you sure you want to clear saved content?')) {
 			localStorage.removeItem('markdown-editor-content');
-			setMarkdown('# Welcome to Markdown Editor\nStart typing...');
+			const welcomeContent = '# Welcome to Markdown Editor\nStart typing...';
+			setMarkdown(welcomeContent);
+			saveState(welcomeContent); // Save to history
 			setIsSaved(true);
+			setLastSaved(null);
 		}
 	};
 
@@ -183,8 +234,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent = '' }) 
 	};
 
 	const exportAsHTML = () => {
-		const htmlContent = parseMarkdown(debouncedMarkdown);
-
+		const htmlContent = parseMarkdown(markdown);
 		const fullHTML = `
 			<!DOCTYPE html>
 			<html lang="en">
@@ -310,13 +360,18 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent = '' }) 
 		});
 	};
 
-	React.useEffect(() => {
-		const parse = async () => {
-			const html = await parseMarkdown(debouncedMarkdown);
-			setRenderedHTML(html);
-		};
-		parse();
-	}, [debouncedMarkdown]);
+	const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+		const newContent = e.target.value;
+		setMarkdown(newContent);
+
+		// Save cursor position
+		const start = e.target.selectionStart;
+		const end = e.target.selectionEnd;
+		setCursorPosition({ start, end })
+
+		// SAve to history (debounced version will handle auto-save)
+		saveState(newContent, { start, end })
+	}
 
 	return (
 		<div className="markdown-editor">
@@ -348,6 +403,8 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent = '' }) 
 							className="file-input"
 						/>
 					</label>
+					<button onClick={undo} disabled={!canUndo} className='btn' style={{ background: '#ffc107' }} title='Undo (Ctrl+Z)'>↩️ Undo</button>
+					<button onClick={redo} disabled={!canRedo} className='btn' style={{ background: '#20c997' }} title='Redo (Ctrl+Y)'>↪️ Redo</button>
 					<button onClick={handleClearSaved} className="btn" style={{ background: '#dc3545' }}>
 						🗑️ Clear Saved
 					</button>
@@ -365,7 +422,7 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = ({ initialContent = '' }) 
 				<textarea
 					ref={textareaRef}
 					value={markdown}
-					onChange={e => setMarkdown(e.target.value)}
+					onChange={handleTextChange}
 					placeholder='Write your markdown here...'
 					className='markdown-input'
 				/>
